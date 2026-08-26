@@ -1,0 +1,23 @@
+replicaCount: 2
+
+image:
+  repository: sample-app-microservice
+  tag: "1.0.0"
+  pullPolicy: IfNotPresent
+
+service:
+  type: LoadBalancer
+  port: 80
+  targetPort: 8000
+
+resources:
+  limits:
+    cpu: 250m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+env:
+  ENVIRONNEMENT: "staging"
+  LOG_LEVEL: "info"

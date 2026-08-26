@@ -1,0 +1,8 @@
+apiVersion: v2
+name: sample-app-microservice
+
+description: Helm chart for the FastAPI DevSecOps microservice
+
+version: "0.1.0"
+appVersion: "1.0.0"
+
