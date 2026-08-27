@@ -32,7 +32,7 @@ jobs:
       - name: Install helm
         uses: azure/setup-helm@v5
         with:
-          version: ''
+          version: 'latest'
         id: install
 
       - name: Helm lint
