@@ -1,0 +1,64 @@
+name: CI Pipeline
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  project_id: ${{ vars.GCP_PROJECT_ID }}
+  region: ${{ vars.GCP_REGION }}
+  zone: ${{ vars.GCP_ZONE }}
+  artifact_registry: ${{ vars.GCP_ARTIFACT_REGISTRY }}
+
+jobs:
+  
+  helm-check:
+    name: "Helm Validation"
+    runs-on: "ubuntu-latest"
+
+    defaults:
+      run:
+        working-directory: ./chart
+
+    steps:
+
+      - name: Check code
+        uses: actions/checkout@v4
+
+      - name: Install helm
+        uses: azure/setup-helm@v5
+        with:
+          version: ''
+        id: install
+
+      - name: Helm lint
+        run: helm lint .
+
+  docker-build-push:
+    name: "Image Delivry"
+    runs-on: "ubuntu-latest"
+    needs: helm-check
+
+    steps:
+      - name: Check code
+        uses: actions/checkout@v4
+
+      - name: GCP authentication
+        uses: 'google-github-actions/auth@v2'
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_WIF_SA }}
+        
+      - name: Artifact Registry authentication
+        run: |
+          gcloud auth configure-docker ${{ vars.GCP_REGION }}-docker.pkg.dev --quiet
+
+      - name: Build and Push Docker image
+        run: |
+          IMAGE_URI="${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.GCP_ARTIFACT_REGISTRY }}/sample-app:${{ github.sha }}"
+          docker build -t "$IMAGE_URI" .
+          docker push "$IMAGE_URI"
