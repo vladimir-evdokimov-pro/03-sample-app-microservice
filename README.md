@@ -105,8 +105,8 @@ The repository relies on GitHub Repository Variables for its CI workflow (`.gith
 | `GCP_REGION` | GCP Target Region | `europe-west9` |
 | `GCP_ZONE` | GCP Target Zone | `europe-west9-a` |
 | `GCP_ARTIFACT_REGISTRY` | Name of the Artifact Registry repo | `sample-app-repo` |
-| `GCP_WIF_PROVIDER` | Workload Identity Provider resource name | `projects/123/locations/global/workloadIdentityPools/...` |
-| `GCP_WIF_SA` | Service Account email bound to WIF | `github-actions-sa@project.iam.gserviceaccount.com` |
+| `GCP_WORKLOAD_IDENTITY_PROVIDER` | Workload Identity Provider resource name | `projects/123/locations/global/workloadIdentityPools/...` |
+| `GCP_SERVICE_ACCOUNT` | Service Account email bound to WIF | `github-actions-sa@project.iam.gserviceaccount.com` |
 
 ---
 
