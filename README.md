@@ -6,23 +6,25 @@
 [![Google Cloud](https://img.shields.io/badge/Artifact_Registry-4285F4?style=for-the-badge&logo=googlecloud&logoColor=white)](https://cloud.google.com/artifact-registry)
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-326CE5?style=for-the-badge&logo=kubernetes&logoColor=white)](https://kubernetes.io/)
 
-> **Application Workload:** A lightweight, production-ready microservice packaged with Docker and Helm, featuring automated CI verification via GitHub Actions (Workload Identity Federation) for seamless GitOps deployment on Private GKE.
+> **Application Workload:** A lightweight Python microservice packaged with Docker and Helm, featuring automated CI verification, automated Git tag write-back via GitHub Actions, and clean GitOps decoupling for GKE.
 
 ---
 
 ## Executive Summary
 
-This repository contains the microservice application workload (Project 3 of 3) for the Cloud-Native platform. It provides the application source code, Docker containerization setup, and Helm chart manifests. Integration with GitHub Actions ensures automated static chart analysis (`helm lint`), keyless authentication with GCP using Workload Identity Federation (WIF), and automated image builds pushed directly to Google Artifact Registry for GitOps synchronization via Argo CD.
+This repository contains the microservice application workload (Project 3 of 3) for the Cloud-Native platform. It provides the application source code (`src/main.py`), containerization config, and Helm chart manifests (`chart/`). 
+
+Integration with GitHub Actions ensures static chart analysis (`helm lint`), keyless authentication with GCP via Workload Identity Federation (WIF), and image compilation pushed directly to Google Artifact Registry. Upon build completion, the pipeline automatically writes back the new image commit-SHA tag into `chart/values.yaml` so Argo CD instantly detects and reconciles state changes.
 
 ---
 
 ## Key Features & Platform Standards
 
-* **Containerized Workload:** Optimized multi-stage Docker build producing lightweight and secure container images.
-* **Helm 3 Packaging:** Declarative chart definition (`chart/`) managing Deployment, Service, and Ingress resources for Kubernetes.
-* **Keyless GCP Authentication:** Secure authentication in GitHub Actions via Workload Identity Federation (WIF), eliminating long-lived service account JSON keys.
-* **Automated CI Validation:** Enforced continuous integration pipeline verifying Helm syntax and publishing immutable, commit-SHA-tagged container images.
-* **GitOps Alignment:** Designed to be consumed declaratively by Argo CD (managed in **`02-platform-gitops-config`**) for zero-touch cluster deployments.
+* **Containerized Microservice:** Python application containerized via multi-stage build.
+* **Helm 3 Packaging:** Declarative chart definition (`chart/`) managing Deployment and Service resources.
+* **Automated Git Tag Write-Back:** CI pipeline updates the image `tag` directly in `chart/values.yaml` using the commit SHA, maintaining Git as the Single Source of Truth.
+* **Clean GitOps Decoupling:** The Helm chart repository reference remains agnostic (`sample-app`), while environment-specific Google Artifact Registry paths are injected via Helm parameter overrides in **`02-platform-gitops-config`**.
+* **Keyless GCP Auth:** Keyless authentication in GitHub Actions via Workload Identity Federation (WIF).
 
 ---
 
@@ -50,27 +52,30 @@ graph TD
     classDef gcpYellow fill:#ffffff,stroke:#ca8a04,stroke-width:2px,color:#713f12;
 
     subgraph GITHUB["<font color='#0f172a'><b>Source Repository (03-sample-app-microservice)</b></font>"]
-        CODE["Application Source Code & Dockerfile"]:::gitBlue
-        HELM_CHART["Helm Chart (chart/)"]:::gitBlue
+        CODE["App Source Code (src/main.py)"]:::gitBlue
+        HELM_CHART["Helm Chart (chart/values.yaml)"]:::gitBlue
         WORKFLOW[".github/workflows/ci.yml"]:::gitBlue
     end
 
     subgraph CI["<font color='#1e40af'><b>GitHub Actions CI Pipeline</b></font>"]
-        JOB1["Job 1: Helm Validation (helm lint)"]:::k8sGreen
-        JOB2["Job 2: WIF Auth & Docker Build"]:::k8sGreen
+        JOB1["Helm Validation (helm lint)"]:::k8sGreen
+        JOB2["Build & Push Image (SHA Tag)"]:::k8sGreen
+        JOB3["Git Write-Back (Update tag in values.yaml)"]:::k8sGreen
     end
 
-    subgraph GCP["<font color='#166534'><b>Google Cloud Platform & Kubernetes</b></font>"]
+    subgraph GCP["<font color='#166534'><b>Google Cloud & Kubernetes Cluster</b></font>"]
         GAR["Google Artifact Registry"]:::gcpYellow
-        ARGOCD["Argo CD / GKE Cluster"]:::k8sGreen
+        ARGOCD["Argo CD (Repo 02 parameter override)"]:::k8sGreen
     end
 
-    CODE -->|Push / Pull Request| WORKFLOW
+    CODE -->|Push to main| WORKFLOW
     WORKFLOW --> JOB1
-    JOB1 -->|Success| JOB2
-    JOB2 -->|Authenticate WIF & Push Image| GAR
-    GAR -.->|Pull Image via GitOps| ARGOCD
-    HELM_CHART -.->|Sync Manifests| ARGOCD
+    JOB1 --> JOB2
+    JOB2 -->|Push Image| GAR
+    JOB2 --> JOB3
+    JOB3 -->|Commit SHA Tag back to Git| HELM_CHART
+    HELM_CHART -.->|Sync Trigger| ARGOCD
+    GAR -.->|Pull Image| ARGOCD
 ```
 
 ---
@@ -81,32 +86,29 @@ graph TD
 .
 ├── .github/
 │   └── workflows/
-│       └── ci.yml             # GitHub Actions CI workflow (Helm Lint & Docker Build/Push)
+│       └── ci.yml             # GitHub Actions CI workflow (Build, Push & Git Tag Write-Back)
 ├── chart/                     # Helm chart configuration
-│   ├── templates/             # Kubernetes resource templates (Deployment, Service, etc.)
+│   ├── templates/             # Kubernetes resource templates (Deployment, Service)
 │   ├── Chart.yaml             # Helm chart metadata
-│   └── values.yaml            # Default deployment variables
-├── Dockerfile                 # Application containerization specification
-├── index.js                   # Microservice source code
-├── package.json               # Node.js dependencies and script definition
+│   └── values.yaml            # Deployment variables (Updated automatically by CI)
+├── src/
+│   ├── main.py                # Microservice application code
+│   └── requirements.txt       # Python dependencies
+├── Dockerfile                 # Multi-stage Docker build file
 ├── LICENSE
 └── README.md
 ```
 
 ---
 
-## GitHub Actions CI Pipeline Setup
+## CI Pipeline & GitOps Automation
 
-The repository relies on GitHub Repository Variables for its CI workflow (`.github/workflows/ci.yml`). Configure the following variables in your repository (**Settings > Secrets and variables > Actions > Variables**):
+Whenever code is pushed to `main`, `.github/workflows/ci.yml` performs the following automated steps:
 
-| Variable Name | Description | Example Value |
-| :--- | :--- | :--- |
-| `GCP_PROJECT_ID` | GCP Project ID | `gke-devsecops-stack-26` |
-| `GCP_REGION` | GCP Target Region | `europe-west9` |
-| `GCP_ZONE` | GCP Target Zone | `europe-west9-a` |
-| `GCP_ARTIFACT_REGISTRY` | Name of the Artifact Registry repo | `sample-app-repo` |
-| `GCP_WORKLOAD_IDENTITY_PROVIDER` | Workload Identity Provider resource name | `projects/123/locations/global/workloadIdentityPools/...` |
-| `GCP_SERVICE_ACCOUNT` | Service Account email bound to WIF | `github-actions-sa@project.iam.gserviceaccount.com` |
+1. **Linting:** Runs `helm lint` against the chart directory.
+2. **Authentication:** Authenticates to GCP using Workload Identity Federation (WIF).
+3. **Build & Push:** Builds the Docker container tagged with `${{ github.sha }}` and pushes it to Artifact Registry.
+4. **Git Write-Back:** Updates `image.tag` in `chart/values.yaml` with the commit SHA and commits back to `main` with `[skip ci]`.
 
 ---
 
@@ -116,33 +118,22 @@ The repository relies on GitHub Repository Variables for its CI workflow (`.gith
 
 * Docker Desktop with Kubernetes enabled.
 * Helm 3 installed (`brew install helm`).
-* `kubectl` configured for local execution.
+* `kubectl` configured.
 
-### 1. Enable Local Kubernetes
-
-In Docker Desktop settings, navigate to **Kubernetes** and click **Enable Kubernetes** / **Create cluster**.
-
-### 2. Deploy Locally with Helm
-
-Set your context to Docker Desktop and install the release:
+### 1. Deploy Locally with Helm
 
 ```bash
-# Switch context to local Docker Desktop
+# Switch context to local Kubernetes
 kubectl config use-context docker-desktop
 
 # Install Helm release
 helm install sample-app chart/
 ```
 
-### 3. Verify Deployment
-
-Check the running pods and query the application endpoint:
+### 2. Verify Endpoint
 
 ```bash
-# Verify pod status
 kubectl get pods
-
-# Test local endpoint response
 curl http://localhost:80
 ```
 
@@ -151,20 +142,12 @@ curl http://localhost:80
 {"status":"online","message":"Operational API"}
 ```
 
-### 4. Cleanup Local Environment
-
-Uninstall the Helm release when testing is complete:
-
-```bash
-helm uninstall sample-app
-```
-
 ---
 
 ## Platform Ecosystem
 
 This repository is **Part 3 of 3** in the Cloud-Native End-to-End Platform series:
 
-1. [**`01-platform-infra-terraform`**](https://github.com/<YOUR_GITHUB_USERNAME>/01-platform-infra-terraform) — Provisioning base cloud infrastructure (VPC, GKE Private, Cloud SQL, Artifact Registry).
-2. [**`02-platform-gitops-config`**](https://github.com/<YOUR_GITHUB_USERNAME>/02-platform-gitops-config) — GitOps engine, Kubernetes controllers & cluster configuration (Argo CD, Ingress, Cert-Manager).
-3. **`03-sample-app-microservice`** *(This repository)* — Microservice application workloads, Docker containerization, Helm packaging, and CI pipeline.
+1. [**`01-platform-infra-terraform`**](https://github.com/vladimir-evdokimov-pro/01-platform-infra-terraform) — Base cloud infrastructure provisioning (VPC, GKE Private, Artifact Registry).
+2. [**`02-platform-gitops-config`**](https://github.com/vladimir-evdokimov-pro/02-platform-gitops-config) — GitOps engine and cluster configurations (Argo CD, Helm Parameter Overrides).
+3. **`03-sample-app-microservice`** *(This repository)* — Workload application code, Dockerfile, Helm packaging, and CI automation pipeline.
