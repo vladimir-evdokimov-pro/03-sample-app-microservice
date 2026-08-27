@@ -2,7 +2,7 @@ replicaCount: 2
 
 image:
   repository: europe-west9-docker.pkg.dev/gke-devsecops-stack-26/sample-app-repo/sample-app
-  tag: "e6338ec9c2be2efd126e1f4e4bc768d538c8c542"
+  tag: "31c318a4e1c4049e8825b775114ccc4ccfba8540"
   pullPolicy: Always
 
 service:
